@@ -2,7 +2,7 @@
 
 **English** | [Русский](README.ru.md)
 
-Fork of [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) with operational patches (`--bind-ip`, `--max-payload`, MAX reconnect). See [CHANGELOG.fork.md](CHANGELOG.fork.md).
+Fork of [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) with operational patches (`--bind-ip`, `--max-payload`, MAX reconnect). See [CHANGELOG.md](CHANGELOG.md).
 
 Network stack research tool. TCP tunnel with pluggable transports.
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | **Русский**
 
-Форк [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) с рабочими патчами (`--bind-ip`, reconnect MAX-приёмника, `--call-delay`). См. [CHANGELOG.fork.md](CHANGELOG.fork.md).
+Форк [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) с рабочими патчами (`--bind-ip`, reconnect MAX-приёмника, `--call-delay`). См. [CHANGELOG.md](CHANGELOG.md).
 
 Исследовательский инструмент сетевого стека. TCP-туннель с подключаемыми транспортами.
 
