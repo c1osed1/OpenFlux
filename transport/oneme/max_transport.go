@@ -2,6 +2,7 @@ package oneme
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"universal-bypass-tool/transport"
@@ -31,7 +32,7 @@ func (t *OneMeTransport) Stats() transport.TransportStats {
 func NewOneMeTransport(isExit bool, maxToken string, callees []int64, config transport.TransportConfig, callDelay int, icePayload bool) *OneMeTransport {
 	return &OneMeTransport{
 		b:          transport.NewBaseTransport(config),
-		token:      maxToken,
+		token:      strings.TrimSpace(maxToken),
 		callees:    callees,
 		exit:       isExit,
 		callDelay:  callDelay,
@@ -46,7 +47,7 @@ func (t *OneMeTransport) Start() error {
 		return fmt.Errorf("max connect: %w", err)
 	}
 	if err := t.oneMeClient.LoginByToken(t.token); err != nil {
-		return fmt.Errorf("max login: %w", err)
+		logError("[MAX] login: %v (continuing; start-call may still work)", err)
 	}
 
 	mode := "datachannel"

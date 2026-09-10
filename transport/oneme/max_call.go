@@ -511,7 +511,13 @@ func startOutgoingCall(client *MaxClient, callees []int64, callDelaySec int, ice
 			paramsStr, _ := payload["internalCallerParams"].(string)
 			var params InternalCallerParams
 			json.Unmarshal([]byte(paramsStr), &params)
-
+			if params.Endpoint == "" || !strings.HasPrefix(params.Endpoint, "ws") {
+				logError("[CALLER] Start-call returned no websocket endpoint, retrying")
+				time.Sleep(backoff)
+				backoff = nextBackoff(backoff)
+				attempt++
+				continue
+			}
 			endpoint := params.Endpoint + "&platform=WEB&appVersion=1.1&version=5&device=browser&capabilities=2A03F&clientType=ONE_ME&tgt=start"
 			conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
 			if err != nil {

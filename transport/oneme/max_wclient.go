@@ -97,7 +97,7 @@ func (c *MaxClient) LoginByToken(token string) error {
 	}
 	var payload map[string]interface{}
 	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["error"]; ok {
+	if _, ok := payload["error"]; ok && payload["error"] != nil && payload["error"] != "" {
 		return fmt.Errorf("login failed: %v", payload["error"])
 	}
 	c.loggedIn = true
