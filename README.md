@@ -2,6 +2,8 @@
 
 **English** | [Русский](README.ru.md)
 
+Fork of [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) with operational patches (`--bind-ip`, MAX receiver reconnect, `--call-delay`). See [CHANGELOG.fork.md](CHANGELOG.fork.md).
+
 Network stack research tool. TCP tunnel with pluggable transports.
 
 ## Overview
@@ -92,7 +94,9 @@ Then set up SOCKS5 proxy in your browser at localhost:1080.
 | `--maxToken`  | ``                  | Auth token (Max)           |
 | `--maxUid`    | ``                  | User ID (Max)              |
 | `--debug`     | `false`             | Enable verbose logging     |
-| `--transport` | `yandex`            | Select transport backend   |
+| `--transport` | `yandex`            | Select transport backend (`yandex`, `oneme`) |
+| `--bind-ip`   | empty               | Exit-node source IPv4 (multi-IP hosts) |
+| `--call-delay`| `3`                 | Seconds to wait before MAX outgoing call |
 
 ## Implementing custom transports
 

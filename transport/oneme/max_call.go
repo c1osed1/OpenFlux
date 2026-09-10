@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -83,8 +82,22 @@ func (h *CallHandler) signalReconnect() {
 		default:
 		}
 	} else {
-		logError("[%s] Receiver connection died, exiting", h.tag)
-		os.Exit(1)
+		logError("[%s] Receiver signaling died, waiting for next call", h.tag)
+		h.mu.Lock()
+		if h.conn != nil {
+			h.conn.Close()
+			h.conn = nil
+		}
+		if h.pc != nil {
+			h.pc.Close()
+			h.pc = nil
+		}
+		h.dc = nil
+		h.acceptSent = false
+		h.callAccepted = false
+		h.hasRemoteDesc = false
+		h.localID = 0
+		h.mu.Unlock()
 	}
 }
 
@@ -329,7 +342,7 @@ func (h *CallHandler) handleSDP(sdpType string, sdpStr string) {
 	}
 }
 
-func startOutgoingCall(client *MaxClient, calleeID int64) *CallHandler {
+func startOutgoingCall(client *MaxClient, calleeID int64, callDelaySec int) *CallHandler {
 	h := &CallHandler{tag: "CALLER", role: "caller"}
 	h.seq = 1
 	h.reconnectCh = make(chan struct{}, 1)
@@ -407,6 +420,10 @@ func startOutgoingCall(client *MaxClient, calleeID int64) *CallHandler {
 
 	// Connect with auto-reconnect loop
 	go func() {
+		if callDelaySec > 0 {
+			logInfo("[CALLER] Waiting %ds before first call", callDelaySec)
+			time.Sleep(time.Duration(callDelaySec) * time.Second)
+		}
 		for {
 			h.mu.Lock()
 			h.callAccepted = false

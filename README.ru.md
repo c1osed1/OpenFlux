@@ -2,6 +2,8 @@
 
 [English](README.md) | **Русский**
 
+Форк [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) с рабочими патчами (`--bind-ip`, reconnect MAX-приёмника, `--call-delay`). См. [CHANGELOG.fork.md](CHANGELOG.fork.md).
+
 Исследовательский инструмент сетевого стека. TCP-туннель с подключаемыми транспортами.
 
 ## Обзор
@@ -92,7 +94,9 @@ sudo ./universal-bypass-tool --exit-node --url "YOUR_YANDEX_DOC_URL" --debug
 | `--maxToken`  | ``                  | Токен авторизации (Max)        |
 | `--maxUid`    | ``                  | ID пользователя (Max)          |
 | `--debug`     | `false`             | Включить подробное логирование |
-| `--transport` | `yandex`            | Выбор транспорта               |
+| `--transport` | `yandex`            | Выбор транспорта (`yandex`, `oneme`) |
+| `--bind-ip`   | пусто               | Исходящий IPv4 exit-ноды (несколько адресов) |
+| `--call-delay`| `3`                 | Пауза перед исходящим MAX-звонком |
 
 ## Реализация собственных транспортов
 

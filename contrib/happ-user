@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Patch mihomo VLESS users in place. Edit HOST / CFG for your install."""
+import re, sys, uuid, subprocess
+from pathlib import Path
+
+CFG = Path("/etc/mihomo/config.yaml")
+HOST = "flux.effusion.ru"
+USER_BLOCK = re.compile(
+    r"^      - username: ([^\n]+)\n        uuid: ([^\n]+)\n",
+    re.M,
+)
+
+def usage():
+    print("Usage: happ-user list | add <name> | del <name>")
+    sys.exit(1)
+
+def parse(text):
+    return USER_BLOCK.findall(text)
+
+def link(name, uid):
+    return (
+        f"vless://{uid}@{HOST}:443"
+        f"?encryption=none&security=tls&sni={HOST}"
+        f"&type=ws&host={HOST}"
+        f"&path=%2Fassets%2Fjs%2Fvendor-react.min.js"
+        f"#{name}"
+    )
+
+def reload():
+    subprocess.check_call(["/usr/local/bin/mihomo", "-t", "-d", "/etc/mihomo", "-f", str(CFG)])
+    subprocess.check_call(["systemctl", "restart", "mihomo-openflux"])
+    print("mihomo reloaded")
+
+args = sys.argv[1:]
+if not args:
+    usage()
+cmd = args[0]
+text = CFG.read_text()
+users = parse(text)
+
+if cmd == "list":
+    for name, uid in users:
+        print(f"{name}\t{uid}")
+    sys.exit(0)
+
+if cmd in ("add", "del") and len(args) < 2:
+    usage()
+name = args[1]
+
+if cmd == "del":
+    new = [(n, u) for n, u in users if n != name]
+    if len(new) == len(users):
+        sys.exit(f"user not found: {name}")
+    block = "".join(f"      - username: {n}\n        uuid: {u}\n" for n, u in new)
+    text2, nsub = re.subn(
+        r"(    users:\n)(?:      - username: [^\n]+\n        uuid: [^\n]+\n)+",
+        r"\1" + block,
+        text,
+        count=1,
+    )
+    if nsub != 1:
+        sys.exit("failed to patch users block")
+    CFG.write_text(text2)
+    reload()
+    print(f"deleted {name}")
+    sys.exit(0)
+
+if cmd == "add":
+    for n, u in users:
+        if n == name:
+            print("already exists, reprinting link")
+            print(f"user: {n}")
+            print(f"uuid: {u}")
+            print(link(n, u))
+            sys.exit(0)
+    uid = str(uuid.uuid4())
+    entry = f"      - username: {name}\n        uuid: {uid}\n"
+    if not re.search(r"    users:\n", text):
+        sys.exit("users: block not found")
+    text2, nsub = re.subn(
+        r"(    users:\n(?:      - username: [^\n]+\n        uuid: [^\n]+\n)*)",
+        r"\1" + entry,
+        text,
+        count=1,
+    )
+    if nsub != 1:
+        sys.exit("failed to insert user")
+    CFG.write_text(text2)
+    print(f"user: {name}")
+    print(f"uuid: {uid}")
+    print(link(name, uid))
+    reload()
+    sys.exit(0)
+
+usage()

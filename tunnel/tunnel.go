@@ -186,7 +186,16 @@ func (t *TCPTunnel) printStats() {
 	}
 }
 
+var bindIP string
+
+func SetBindIP(ip string) {
+	bindIP = ip
+}
+
 func getLocalIP() string {
+	if bindIP != "" {
+		return bindIP
+	}
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
 		return "192.168.1.100"

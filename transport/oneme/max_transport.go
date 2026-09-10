@@ -9,7 +9,8 @@ type OneMeTransport struct {
 	b     *transport.BaseTransport
 	token string
 	uid   int64
-	exit  bool
+	exit      bool
+	callDelay int
 
 	oneMeClient MaxClient
 	ch          *CallHandler
@@ -23,12 +24,13 @@ func (t *OneMeTransport) Stats() transport.TransportStats {
 	return t.b.Stats()
 }
 
-func NewOneMeTransport(isExit bool, maxToken string, maxUid int64, config transport.TransportConfig) *OneMeTransport {
+func NewOneMeTransport(isExit bool, maxToken string, maxUid int64, config transport.TransportConfig, callDelay int) *OneMeTransport {
 	return &OneMeTransport{
-		b:     transport.NewBaseTransport(config),
-		token: maxToken,
-		uid:   maxUid,
-		exit:  isExit,
+		b:         transport.NewBaseTransport(config),
+		token:     maxToken,
+		uid:       maxUid,
+		exit:      isExit,
+		callDelay: callDelay,
 	}
 }
 
@@ -43,7 +45,7 @@ func (t *OneMeTransport) Start() error {
 		t.ch = startIncomingListener(&t.oneMeClient)
 	} else {
 		utils.Debugf("configured ch for client mode")
-		t.ch = startOutgoingCall(&t.oneMeClient, t.uid)
+		t.ch = startOutgoingCall(&t.oneMeClient, t.uid, t.callDelay)
 	}
 
 	utils.Debugf("configured dc inbound")

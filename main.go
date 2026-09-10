@@ -34,6 +34,8 @@ func main() {
 	flag.StringVar(&globalDocUrl, "url", "http://#", "Document URL. If u use Yandex.Docs transport")
 	flag.StringVar(&maxToken, "maxToken", "", "MAX call user id. If u use MAX transport")
 	flag.StringVar(&maxUid, "maxUid", "", "MAX Web token. If u use MAX transport")
+	bindIP := flag.String("bind-ip", "", "Exit-node source IPv4 (multi-IP hosts)")
+	callDelay := flag.Int("call-delay", 3, "Seconds to wait before MAX outgoing call")
 	flag.Parse()
 
 	if !*exitNode && !*client {
@@ -43,6 +45,10 @@ func main() {
 
 	if *debug {
 		utils.EnableDebug()
+	}
+	if *bindIP != "" {
+		tunnel.SetBindIP(*bindIP)
+		log.Printf("Bind IP: %s", *bindIP)
 	}
 
 	log.Printf("=== Universal Bypass Tool ===")
@@ -57,7 +63,7 @@ func main() {
 		trans = transport.NewCompressedTransport(yandex.NewYandexDocsTransport(globalDocUrl, config))
 	case "oneme":
 		uidint, _ := strconv.ParseInt(maxUid, 10, 64)
-		trans = transport.NewCompressedTransport(oneme.NewOneMeTransport(*exitNode, maxToken, uidint, config))
+		trans = transport.NewCompressedTransport(oneme.NewOneMeTransport(*exitNode, maxToken, uidint, config, *callDelay))
 	default:
 		log.Fatalf("Unknown transport type: %s", *transportType)
 	}
