@@ -27,7 +27,8 @@
 ### Yandex (`transport/yandex`)
 
 - Старт падает с понятной ошибкой, если нет legacy OnlyOffice (Volga/WOPI), без panic.
-- `--channel`: формат курсора `18;<канал>;<payload>`; пустой канал — как в upstream (`18;<payload>`).
+- Очередь Yandex 4096, keepalive 25 с, reconnect с паузой 2–15 с (без шторма при `close 1005`).
+- Watchdog рестартит клиент только если SOCKS-порт не слушает, не по таймауту `ifconfig.me`.
 
 ### Репозиторий
 

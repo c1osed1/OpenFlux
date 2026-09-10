@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -53,8 +54,9 @@ type YandexDocsTransport struct {
 	channel string
 	session *DocSession
 
-	userCounter atomic.Int32
-	baseUserID  string
+	userCounter  atomic.Int32
+	baseUserID   string
+	reconnectGen atomic.Uint32
 }
 
 func sanitizeChannel(ch string) string {
@@ -158,24 +160,35 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 
 		info, err := t.fetchDocInfo(t.url, userID)
 		if err != nil {
-			utils.Debugf("[YDOCS] fetchDocInfo failed: %v", err)
+			log.Printf("[YDOCS] fetchDocInfo failed: %v", err)
 			t.scheduleReconnect(attempt)
 			return
 		}
 
-		dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+		dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
 		headers := http.Header{}
 		headers.Set("User-Agent", "Mozilla/5.0")
 		headers.Set("Origin", info.Origin)
 		headers.Set("Cookie", info.CookieStr)
 		headers.Set("Host", info.Host)
 
+		t.Mu.Lock()
+		if existingSession != nil && existingSession.Conn != nil {
+			existingSession.Conn.Close()
+		}
+		t.Mu.Unlock()
+
 		conn, _, err := dialer.Dial(info.WsURL, headers)
 		if err != nil {
-			utils.Debugf("[YDOCS] WebSocket dial failed: %v", err)
+			log.Printf("[YDOCS] websocket dial failed: %v", err)
 			t.scheduleReconnect(attempt)
 			return
 		}
+		conn.SetReadLimit(1 << 20)
+		_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		conn.SetPongHandler(func(string) error {
+			return conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		})
 
 		writeQueue := make(chan []byte, t.GetConfig().MaxQueueSize)
 		if existingSession != nil {
@@ -212,9 +225,10 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 		session.safeWrite(websocket.TextMessage, []byte(fmt.Sprintf("42%s", string(messagePart))))
 
 		for t.IsRunning() {
+			_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				utils.Debugf("[YDOCS] Read error: %v", err)
+				log.Printf("[YDOCS] websocket read: %v", err)
 				t.SetConnected(false)
 				t.scheduleReconnect(attempt)
 				return
@@ -231,7 +245,7 @@ func (t *YandexDocsTransport) writerLoop() {
 		t.Mu.Unlock()
 
 		if session == nil || session.Conn == nil {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 
@@ -239,12 +253,10 @@ func (t *YandexDocsTransport) writerLoop() {
 		case packet := <-session.WriteQueue:
 			payload := base64.StdEncoding.EncodeToString(packet)
 			msg := fmt.Sprintf(`42["message",{"type":"cursor","cursor":"%s"}]`, t.cursorValue(payload))
-
 			if err := session.safeWrite(websocket.TextMessage, []byte(msg)); err != nil {
-				utils.Debugf("[YDOCS] Write error: %v", err)
+				log.Printf("[YDOCS] write: %v", err)
 			}
-		default:
-			time.Sleep(10 * time.Millisecond)
+		case <-time.After(200 * time.Millisecond):
 		}
 	}
 }
@@ -262,7 +274,7 @@ func (t *YandexDocsTransport) keepAliveLoop() {
 
 		if session != nil && session.Conn != nil {
 			if err := session.safeWrite(websocket.TextMessage, []byte(keepAliveMsg)); err != nil {
-				utils.Debugf("[YDOCS] Keep-alive failed: %v", err)
+				log.Printf("[YDOCS] keep-alive: %v", err)
 				t.SetConnected(false)
 			}
 		}
@@ -349,7 +361,23 @@ func (t *YandexDocsTransport) scheduleReconnect(attempt int) {
 		return
 	}
 
+	gen := t.reconnectGen.Add(1)
 	t.RecordReconnect()
+	delay := t.GetConfig().ReconnectDelay
+	if delay <= 0 {
+		delay = time.Second
+	}
+	for i := 0; i < attempt && delay < 15*time.Second; i++ {
+		delay = time.Duration(float64(delay) * t.GetConfig().ReconnectMultiplier)
+		if delay > 15*time.Second {
+			delay = 15 * time.Second
+		}
+	}
+	log.Printf("[YDOCS] reconnect in %s (attempt %d)", delay, attempt+1)
+	time.Sleep(delay)
+	if t.reconnectGen.Load() != gen {
+		return
+	}
 	t.connectToDoc(attempt + 1)
 }
 
