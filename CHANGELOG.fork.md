@@ -12,7 +12,7 @@ Based on [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux)
 - Login no longer prints MAX contacts or phone numbers. `--debug` logs sizes, not payloads or address books.
 - Periodic `[MAX] stats` (bytes / packets / ready).
 - Yandex Docs fails fast if the editor is not legacy OnlyOffice (no type-assert panic on Volga/WOPI).
-- `--maxToken` / `--maxUid` help text matches the actual flags.
+- `--channel` — Yandex cursor multiplex so two client/exit pairs can share one OnlyOffice doc without mixing packets.
 
 ## Extra tooling (this repo)
 

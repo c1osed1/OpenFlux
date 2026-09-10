@@ -30,6 +30,13 @@ Exit Yandex (bind the other public IP):
 openflux --exit-node --transport yandex --url "$OPENFLUX_URL" --bind-ip 203.0.113.11
 ```
 
+Second Yandex pair on the **same** doc (different `--channel` + the other bind IP):
+
+```
+openflux --exit-node --transport yandex --url "$OPENFLUX_URL" --bind-ip 203.0.113.10 --channel b
+openflux --client --transport yandex --url "$OPENFLUX_URL" --socks5 127.0.0.1:1081 --channel b
+```
+
 Client MAX (ICE injection, default):
 
 ```

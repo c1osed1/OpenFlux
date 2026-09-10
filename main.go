@@ -53,6 +53,7 @@ func main() {
 	bindIP := flag.String("bind-ip", "", "Exit-node source IPv4 (multi-IP hosts)")
 	callDelay := flag.Int("call-delay", 3, "Seconds to wait before MAX outgoing call")
 	maxPayload := flag.String("max-payload", "ice", "MAX payload path: ice (signaling injection) or dc (WebRTC DataChannel)")
+	channel := flag.String("channel", "", "Yandex cursor channel so two tunnels can share one doc")
 	flag.Parse()
 
 	if !*exitNode && !*client {
@@ -82,13 +83,16 @@ func main() {
 	log.Printf("=== OpenFlux ===")
 	log.Printf("Mode: %s", map[bool]string{true: "EXIT NODE", false: "CLIENT"}[*exitNode])
 	log.Printf("Transport: %s", *transportType)
+	if *channel != "" {
+		log.Printf("Yandex channel: %s", *channel)
+	}
 
 	config := transport.DefaultConfig()
 	var trans transport.Transport
 
 	switch *transportType {
 	case "yandex":
-		trans = transport.NewCompressedTransport(yandex.NewYandexDocsTransport(globalDocUrl, config))
+		trans = transport.NewCompressedTransport(yandex.NewYandexDocsTransport(globalDocUrl, config, *channel))
 	case "oneme":
 		callees := parseUIDs(maxUid)
 		trans = transport.NewCompressedTransport(oneme.NewOneMeTransport(*exitNode, maxToken, callees, config, *callDelay, icePayload))

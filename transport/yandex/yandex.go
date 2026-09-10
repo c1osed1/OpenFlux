@@ -49,20 +49,43 @@ func (s *DocSession) safeWrite(messageType int, data []byte) error {
 type YandexDocsTransport struct {
 	*transport.BaseTransport
 
-	url      string
-	session  *DocSession
+	url     string
+	channel string
+	session *DocSession
 
 	userCounter atomic.Int32
 	baseUserID  string
 }
 
-func NewYandexDocsTransport(url string, config transport.TransportConfig) *YandexDocsTransport {
+func sanitizeChannel(ch string) string {
+	var b strings.Builder
+	for _, r := range ch {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	s := b.String()
+	if len(s) > 16 {
+		s = s[:16]
+	}
+	return s
+}
+
+func NewYandexDocsTransport(url string, config transport.TransportConfig, channel string) *YandexDocsTransport {
 	t := &YandexDocsTransport{
 		BaseTransport: transport.NewBaseTransport(config),
 		url:           url,
+		channel:       sanitizeChannel(channel),
 	}
 	t.baseUserID = randUserID()
 	return t
+}
+
+func (t *YandexDocsTransport) cursorValue(payload string) string {
+	if t.channel == "" {
+		return "18;" + payload
+	}
+	return "18;" + t.channel + ";" + payload
 }
 
 func (t *YandexDocsTransport) Start() error {
@@ -71,6 +94,9 @@ func (t *YandexDocsTransport) Start() error {
 	}
 
 	t.baseUserID = randUserID()
+	if t.channel != "" {
+		utils.Debugf("[YDOCS] channel=%s", t.channel)
+	}
 	probeID := t.baseUserID + "001"
 	if _, err := t.fetchDocInfo(t.url, probeID); err != nil {
 		return fmt.Errorf("yandex doc unusable: %w", err)
@@ -212,7 +238,7 @@ func (t *YandexDocsTransport) writerLoop() {
 		select {
 		case packet := <-session.WriteQueue:
 			payload := base64.StdEncoding.EncodeToString(packet)
-			msg := fmt.Sprintf(`42["message",{"type":"cursor","cursor":"18;%s"}]`, payload)
+			msg := fmt.Sprintf(`42["message",{"type":"cursor","cursor":"%s"}]`, t.cursorValue(payload))
 
 			if err := session.safeWrite(websocket.TextMessage, []byte(msg)); err != nil {
 				utils.Debugf("[YDOCS] Write error: %v", err)
@@ -226,7 +252,7 @@ func (t *YandexDocsTransport) writerLoop() {
 func (t *YandexDocsTransport) keepAliveLoop() {
 	ticker := time.NewTicker(t.GetConfig().KeepAliveInterval)
 	defer ticker.Stop()
-	keepAliveMsg := `42["message",{"type":"cursor","cursor":"18;---KA---"}]`
+	keepAliveMsg := fmt.Sprintf(`42["message",{"type":"cursor","cursor":"%s"}]`, t.cursorValue("---KA---"))
 
 	for t.IsRunning() {
 		<-ticker.C
@@ -279,7 +305,7 @@ func (t *YandexDocsTransport) handleMessage(session *DocSession, data []byte) {
 }
 
 func (t *YandexDocsTransport) extractBase64String(response string) string {
-	if strings.Contains(response, "saveChanges") {
+	if t.channel == "" && strings.Contains(response, "saveChanges") {
 		marker := `"excelAdditionalInfo":"`
 		left := strings.Index(response, marker) + len(marker)
 		if left < len(marker) {
@@ -292,12 +318,30 @@ func (t *YandexDocsTransport) extractBase64String(response string) string {
 		return response[left : left+right]
 	}
 
-	re := regexp.MustCompile(`"cursor":"[^;]+;([^"]+)"`)
-	matches := re.FindStringSubmatch(response)
-	if len(matches) > 1 {
-		return matches[1]
+	if t.channel != "" {
+		needle := `"cursor":"18;` + t.channel + `;`
+		left := strings.Index(response, needle)
+		if left < 0 {
+			return ""
+		}
+		left += len(needle)
+		right := strings.Index(response[left:], `"`)
+		if right <= 0 {
+			return ""
+		}
+		return response[left : left+right]
 	}
-	return ""
+
+	re := regexp.MustCompile(`"cursor":"18;([^"]+)"`)
+	matches := re.FindStringSubmatch(response)
+	if len(matches) < 2 {
+		return ""
+	}
+	payload := matches[1]
+	if strings.Contains(payload, ";") {
+		return ""
+	}
+	return payload
 }
 
 func (t *YandexDocsTransport) scheduleReconnect(attempt int) {

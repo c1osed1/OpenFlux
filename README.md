@@ -98,6 +98,7 @@ Then set up SOCKS5 proxy in your browser at localhost:1080.
 | `--bind-ip`   | empty               | Exit-node source IPv4 (multi-IP hosts) |
 | `--call-delay`| `3`                 | Seconds to wait before MAX outgoing call |
 | `--max-payload` | `ice`             | MAX path: `ice` (signaling) or `dc` (DataChannel) |
+| `--channel`   | empty               | Yandex cursor channel (two tunnels, one doc) |
 
 ## Implementing custom transports
 
