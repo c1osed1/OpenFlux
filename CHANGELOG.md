@@ -35,3 +35,4 @@
 - `contrib/happ-user` — правки пользователей mihomo. Env: `HAPP_HOST`, `HAPP_WS_PATH`, `MIHOMO_CFG`.
 - `deploy/README.md` — примеры systemd, без секретов.
 - `.gitignore`: `*.env`, ключи, локальный бинарь `openflux`.
+- GitHub Actions: коммит с `[BUILD]` в сообщении (или ручной workflow) собирает бинарники и публикует Release `build-YYYYMMDD-<sha>`.

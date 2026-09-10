@@ -104,6 +104,17 @@ Then set up SOCKS5 proxy in your browser at localhost:1080.
 
 You are free to implement the `Transport` interface from `transport/transport.go` and register your custom transport in main.go switch block.
 
+## Releases
+
+Commit with `[BUILD]` in the message (or run the workflow by hand) publishes:
+
+- `openflux-linux-amd64` / `openflux-linux-arm64`
+- `openflux-darwin-amd64` / `openflux-darwin-arm64`
+- `openflux-windows-amd64.exe`
+- `happ-user`, `SHA256SUMS`
+
+Tag: `build-YYYYMMDD-<sha7>`. Android/iOS are not built in CI.
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 or later**.

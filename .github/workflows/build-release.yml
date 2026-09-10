@@ -1,0 +1,60 @@
+name: build-release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[BUILD]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          build() {
+            echo "-> $3"
+            GOOS="$1" GOARCH="$2" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "dist/$3" .
+          }
+          build linux amd64 openflux-linux-amd64
+          build linux arm64 openflux-linux-arm64
+          build darwin amd64 openflux-darwin-amd64
+          build darwin arm64 openflux-darwin-arm64
+          build windows amd64 openflux-windows-amd64.exe
+          install -m 755 contrib/happ-user dist/happ-user
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -lh dist
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          day="$(date -u +%Y%m%d)"
+          tag="build-${day}-${short}"
+          title="OpenFlux ${day} (${short})"
+          notes="$(mktemp)"
+          {
+            echo "Сборка с \`${short}\`."
+            echo
+            echo '```'
+            git log -1 --format='%s%n%n%b' "${GITHUB_SHA}"
+            echo '```'
+            echo
+            echo "Файлы: \`openflux-<os>-<arch>\`, \`happ-user\`, \`SHA256SUMS\`."
+          } > "$notes"
+          gh release create "$tag" dist/* \
+            --title "$title" \
+            --notes-file "$notes"

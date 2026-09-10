@@ -104,6 +104,17 @@ sudo ./universal-bypass-tool --exit-node --url "YOUR_YANDEX_DOC_URL" --debug
 
 Вы можете реализовать интерфейс `Transport` из `transport/transport.go` и зарегистрировать свой транспорт в switch-блоке в main.go.
 
+## Релизы
+
+Коммит с `[BUILD]` в сообщении (или ручной запуск workflow) публикует:
+
+- `openflux-linux-amd64` / `openflux-linux-arm64`
+- `openflux-darwin-amd64` / `openflux-darwin-arm64`
+- `openflux-windows-amd64.exe`
+- `happ-user`, `SHA256SUMS`
+
+Тег: `build-YYYYMMDD-<sha7>`. Android/iOS в CI не собираются.
+
 ## Лицензия
 
 Проект распространяется под лицензией **GNU General Public License v3.0 or later**.
