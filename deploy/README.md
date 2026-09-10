@@ -21,6 +21,7 @@ Exit MAX (bind one public IP):
 
 ```
 openflux --exit-node --transport oneme --maxToken "$MAX_TOKEN" --bind-ip 203.0.113.10
+# DataChannel A/B (must match the client): add --max-payload dc
 ```
 
 Exit Yandex (bind the other public IP):
@@ -29,10 +30,16 @@ Exit Yandex (bind the other public IP):
 openflux --exit-node --transport yandex --url "$OPENFLUX_URL" --bind-ip 203.0.113.11
 ```
 
-Client MAX:
+Client MAX (ICE injection, default):
 
 ```
 openflux --client --transport oneme --maxToken "$MAX_TOKEN" --maxUid "$MAX_CALLEE_UID" --socks5 127.0.0.1:1081 --call-delay 5
+```
+
+Client MAX (DataChannel A/B — same flags on **both** client and exit):
+
+```
+openflux --client --transport oneme --max-payload dc --maxToken "$MAX_TOKEN" --maxUid "$MAX_CALLEE_UID,$MAX_CALLEE_UID_2" --socks5 127.0.0.1:1081 --call-delay 5
 ```
 
 Client Yandex:

@@ -91,12 +91,13 @@ sudo ./universal-bypass-tool --exit-node --url "YOUR_YANDEX_DOC_URL" --debug
 | `--exit-node` |                     | Запуск в режиме ноды           |
 | `--socks5`    | `:1080`             | Адрес SOCKS5 прокси            |
 | `--url`       | `https://localhost` | URL документа (Yandex Docs)    |
-| `--maxToken`  | ``                  | Токен авторизации (Max)        |
-| `--maxUid`    | ``                  | ID пользователя (Max)          |
-| `--debug`     | `false`             | Включить подробное логирование |
+| `--maxToken`  | ``                  | Веб-токен MAX              |
+| `--maxUid`    | ``                  | UID callee (через запятую — failover) |
+| `--debug`     | `false`             | Подробные логи (без контактов) |
 | `--transport` | `yandex`            | Выбор транспорта (`yandex`, `oneme`) |
 | `--bind-ip`   | пусто               | Исходящий IPv4 exit-ноды (несколько адресов) |
 | `--call-delay`| `3`                 | Пауза перед исходящим MAX-звонком |
+| `--max-payload` | `ice`             | Путь MAX: `ice` (signaling) или `dc` (DataChannel) |
 
 ## Реализация собственных транспортов
 

@@ -2,7 +2,7 @@
 
 **English** | [Русский](README.ru.md)
 
-Fork of [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) with operational patches (`--bind-ip`, MAX receiver reconnect, `--call-delay`). See [CHANGELOG.fork.md](CHANGELOG.fork.md).
+Fork of [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) with operational patches (`--bind-ip`, `--max-payload`, MAX reconnect). See [CHANGELOG.fork.md](CHANGELOG.fork.md).
 
 Network stack research tool. TCP tunnel with pluggable transports.
 
@@ -91,12 +91,13 @@ Then set up SOCKS5 proxy in your browser at localhost:1080.
 | `--exit-node` |                     | Run as exit node           |
 | `--socks5`    | `:1080`             | SOCKS5 listen address      |
 | `--url`       | `https://localhost` | Document URL (Yandex Docs) |
-| `--maxToken`  | ``                  | Auth token (Max)           |
-| `--maxUid`    | ``                  | User ID (Max)              |
-| `--debug`     | `false`             | Enable verbose logging     |
+| `--maxToken`  | ``                  | MAX web auth token         |
+| `--maxUid`    | ``                  | MAX callee id (comma-separated failover) |
+| `--debug`     | `false`             | Verbose logging (no contact dump) |
 | `--transport` | `yandex`            | Select transport backend (`yandex`, `oneme`) |
 | `--bind-ip`   | empty               | Exit-node source IPv4 (multi-IP hosts) |
 | `--call-delay`| `3`                 | Seconds to wait before MAX outgoing call |
+| `--max-payload` | `ice`             | MAX path: `ice` (signaling) or `dc` (DataChannel) |
 
 ## Implementing custom transports
 

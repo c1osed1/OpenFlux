@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Patch mihomo VLESS users in place. Edit HOST / CFG for your install."""
-import re, sys, uuid, subprocess
+"""Patch mihomo VLESS users in place. Host/path via env, not hardcoded only."""
+import os, re, sys, uuid, subprocess
 from pathlib import Path
+from urllib.parse import quote_plus
 
-CFG = Path("/etc/mihomo/config.yaml")
-HOST = "flux.effusion.ru"
+CFG = Path(os.environ.get("MIHOMO_CFG", "/etc/mihomo/config.yaml"))
+HOST = os.environ.get("HAPP_HOST", "flux.effusion.ru")
+WS_PATH = os.environ.get("HAPP_WS_PATH", "/assets/js/vendor-react.min.js")
 USER_BLOCK = re.compile(
     r"^      - username: ([^\n]+)\n        uuid: ([^\n]+)\n",
     re.M,
@@ -22,7 +24,7 @@ def link(name, uid):
         f"vless://{uid}@{HOST}:443"
         f"?encryption=none&security=tls&sni={HOST}"
         f"&type=ws&host={HOST}"
-        f"&path=%2Fassets%2Fjs%2Fvendor-react.min.js"
+        f"&path={quote_plus(WS_PATH)}"
         f"#{name}"
     )
 

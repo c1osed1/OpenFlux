@@ -42,14 +42,6 @@ type WebRTCConfig struct {
 	TurnUsername      string `json:"trnu"`
 }
 
-type UserInfo struct {
-	ID        int64
-	FirstName string
-	LastName  string
-	FullName  string
-	Phone     int64
-}
-
 type MaxClient struct {
 	conn          *websocket.Conn
 	mu            sync.Mutex
@@ -86,6 +78,8 @@ type CallHandler struct {
         reconnectCh       chan struct{}
         doneCh            chan struct{}
         calleeID          int64
+        callees           []int64
+        icePayload        bool
         client            *MaxClient
         running           atomic.Bool
         mu					sync.Mutex

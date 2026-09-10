@@ -71,6 +71,10 @@ func (t *YandexDocsTransport) Start() error {
 	}
 
 	t.baseUserID = randUserID()
+	probeID := t.baseUserID + "001"
+	if _, err := t.fetchDocInfo(t.url, probeID); err != nil {
+		return fmt.Errorf("yandex doc unusable: %w", err)
+	}
 	go t.keepAliveLoop()
 	t.connectToDoc(0)
 
@@ -107,6 +111,13 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 	utils.Debugf("[YDOCS] connectToDoc attempt ...")
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				utils.Debugf("[YDOCS] panic: %v", r)
+				t.SetConnected(false)
+				t.scheduleReconnect(attempt)
+			}
+		}()
 		t.Mu.Lock()
 		existingSession := t.session
 		t.Mu.Unlock()
@@ -327,17 +338,34 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 	}
 
 	var config map[string]interface{}
-	json.Unmarshal([]byte(matches[1]), &config)
-	officeAction := config["officeActionData"].(map[string]interface{})
-
-	editorConfigRaw, ok := officeAction["editor_config"].(map[string]interface{})
-	if !ok || editorConfigRaw == nil {
-		return YandexDocsInfo{}, fmt.Errorf("editor_config nil - will reconnect")
+	if err := json.Unmarshal([]byte(matches[1]), &config); err != nil {
+		return YandexDocsInfo{}, fmt.Errorf("client-config json: %w", err)
+	}
+	officeAction, ok := asMap(config["officeActionData"])
+	if !ok {
+		return YandexDocsInfo{}, fmt.Errorf("officeActionData missing (need legacy OnlyOffice editor, not Volga/WOPI)")
 	}
 
-	balancerURL := officeAction["balancer_url"].(string)
+	editorConfigRaw, ok := asMap(officeAction["editor_config"])
+	if !ok {
+		return YandexDocsInfo{}, fmt.Errorf("editor_config missing (need legacy OnlyOffice editor, not Volga/WOPI)")
+	}
+
+	balancerURL, ok := officeAction["balancer_url"].(string)
+	if !ok || balancerURL == "" {
+		return YandexDocsInfo{}, fmt.Errorf("balancer_url missing")
+	}
 	host := strings.TrimPrefix(balancerURL, "https://")
-	document := editorConfigRaw["document"].(map[string]interface{})
+	document, ok := asMap(editorConfigRaw["document"])
+	if !ok {
+		return YandexDocsInfo{}, fmt.Errorf("document config missing")
+	}
+
+	token, _ := editorConfigRaw["token"].(string)
+	docKey, _ := document["key"].(string)
+	if token == "" || docKey == "" {
+		return YandexDocsInfo{}, fmt.Errorf("token or document key empty")
+	}
 
 	perms, _ := document["permissions"].(map[string]interface{})
 	if perms == nil {
@@ -346,15 +374,15 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 
 	return YandexDocsInfo{
 		CookieStr:   strings.Join(cookies, "; "),
-		Token:       editorConfigRaw["token"].(string),
-		DocID:       document["key"].(string),
+		Token:       token,
+		DocID:       docKey,
 		Origin:      balancerURL,
 		Host:        host,
-		WsURL:       fmt.Sprintf("wss://%s/2024.1.1-375/doc/%s/c/?EIO=4&transport=websocket", host, document["key"].(string)),
+		WsURL:       fmt.Sprintf("wss://%s/2024.1.1-375/doc/%s/c/?EIO=4&transport=websocket", host, docKey),
 		Permissions: perms,
 		OpenCmd: map[string]interface{}{
 			"c":      "open",
-			"id":     document["key"].(string),
+			"id":     docKey,
 			"userid": userID,
 			"format": document["fileType"],
 			"url":    document["url"],
@@ -362,6 +390,11 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 			"lcid":   25,
 		},
 	}, nil
+}
+
+func asMap(v interface{}) (map[string]interface{}, bool) {
+	m, ok := v.(map[string]interface{})
+	return m, ok && m != nil
 }
 
 func randUserID() string {

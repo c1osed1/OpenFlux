@@ -7,6 +7,10 @@ import (
 
 var vvv bool
 
+func SetVerbose(v bool) {
+	vvv = v
+}
+
 func logDebug(format string, args ...interface{}) {
 	if vvv {
 		fmt.Printf("  [DBG] "+format+"\n", args...)
