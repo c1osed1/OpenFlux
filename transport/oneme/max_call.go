@@ -45,6 +45,11 @@ func (h *CallHandler) PayloadReady() bool {
 }
 
 func (h *CallHandler) readLoop() {
+	defer func() {
+		if r := recover(); r != nil {
+			logError("recovered in CallHandler.readLoop: %v", r)
+		}
+	}()
 	logInfo("[%s] Signaling connected", h.tag)
 	for {
 		_, message, err := h.conn.ReadMessage()

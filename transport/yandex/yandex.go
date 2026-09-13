@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -103,7 +104,7 @@ func (t *YandexDocsTransport) Start() error {
 	if _, err := t.fetchDocInfo(t.url, probeID); err != nil {
 		return fmt.Errorf("yandex doc unusable: %w", err)
 	}
-	go t.keepAliveLoop()
+	utils.SafeGo("yandex.keepAlive", t.keepAliveLoop)
 	t.connectToDoc(0)
 
 	return nil
@@ -141,7 +142,7 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				utils.Debugf("[YDOCS] panic: %v", r)
+				utils.Debugf("[PANIC] recovered in yandex.connect: %v", r)
 				t.SetConnected(false)
 				t.scheduleReconnect(attempt)
 			}
@@ -165,7 +166,16 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 			return
 		}
 
-		dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
+		// Hard TCP dial timeout so a stuck connect/DNS to the balancer host
+		// can't hang the whole transport (HandshakeTimeout alone proved
+		// insufficient on iOS).
+		dialer := websocket.Dialer{
+			HandshakeTimeout: 15 * time.Second,
+			NetDialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+		}
 		headers := http.Header{}
 		headers.Set("User-Agent", "Mozilla/5.0")
 		headers.Set("Origin", info.Origin)
@@ -178,12 +188,18 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 		}
 		t.Mu.Unlock()
 
-		conn, _, err := dialer.Dial(info.WsURL, headers)
+		utils.Debugf("[YDOCS] WebSocket dial %s", info.WsURL)
+		conn, resp, err := dialer.Dial(info.WsURL, headers)
 		if err != nil {
-			log.Printf("[YDOCS] websocket dial failed: %v", err)
+			status := 0
+			if resp != nil {
+				status = resp.StatusCode
+			}
+			log.Printf("[YDOCS] WebSocket dial failed (http %d): %v", status, err)
 			t.scheduleReconnect(attempt)
 			return
 		}
+		utils.Debugf("[YDOCS] WebSocket connected to %s", info.Host)
 		conn.SetReadLimit(1 << 20)
 		_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		conn.SetPongHandler(func(string) error {
@@ -208,7 +224,7 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 		t.Mu.Unlock()
 
 		if existingSession == nil {
-			go t.writerLoop()
+			utils.SafeGo("yandex.writer", t.writerLoop)
 		}
 
 		// Auth - use safeWrite
@@ -224,13 +240,21 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 		messagePart, _ := json.Marshal([]interface{}{"message", authData})
 		session.safeWrite(websocket.TextMessage, []byte(fmt.Sprintf("42%s", string(messagePart))))
 
+		connectedAt := time.Now()
 		for t.IsRunning() {
 			_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Printf("[YDOCS] websocket read: %v", err)
 				t.SetConnected(false)
-				t.scheduleReconnect(attempt)
+				// If the session was healthy for a while, treat the next
+				// connect as fresh (attempt -1 -> next attempt 0) so backoff
+				// doesn't keep growing across normal long-lived reconnects.
+				next := attempt
+				if time.Since(connectedAt) > 15*time.Second {
+					next = -1
+				}
+				t.scheduleReconnect(next)
 				return
 			}
 			t.handleMessage(session, message)
@@ -357,36 +381,57 @@ func (t *YandexDocsTransport) extractBase64String(response string) string {
 }
 
 func (t *YandexDocsTransport) scheduleReconnect(attempt int) {
-	if !t.IsRunning() || attempt >= t.GetConfig().MaxReconnectAttempts {
+	next := attempt + 1
+	if !t.IsRunning() || next >= t.GetConfig().MaxReconnectAttempts {
 		return
 	}
 
-	gen := t.reconnectGen.Add(1)
-	t.RecordReconnect()
-	delay := t.GetConfig().ReconnectDelay
-	if delay <= 0 {
-		delay = time.Second
-	}
-	for i := 0; i < attempt && delay < 15*time.Second; i++ {
-		delay = time.Duration(float64(delay) * t.GetConfig().ReconnectMultiplier)
-		if delay > 15*time.Second {
-			delay = 15 * time.Second
-		}
-	}
-	log.Printf("[YDOCS] reconnect in %s (attempt %d)", delay, attempt+1)
-	time.Sleep(delay)
-	if t.reconnectGen.Load() != gen {
+	// Back off before retrying so a server that closes us immediately doesn't
+	// turn into a tight connect/close loop (previously reconnect was instant).
+	d := reconnectBackoff(next)
+	utils.Debugf("[YDOCS] reconnecting in %v (attempt %d)", d, next)
+	time.Sleep(d)
+	if !t.IsRunning() {
 		return
 	}
-	t.connectToDoc(attempt + 1)
+
+	t.reconnectGen.Add(1)
+	t.RecordReconnect()
+	t.connectToDoc(next)
+}
+
+// reconnectBackoff returns an exponential backoff with jitter, capped at 15s.
+func reconnectBackoff(n int) time.Duration {
+	if n < 1 {
+		n = 1
+	}
+	shift := n - 1
+	if shift > 5 {
+		shift = 5
+	}
+	d := 500 * time.Millisecond * time.Duration(1<<uint(shift))
+	if d > 15*time.Second {
+		d = 15 * time.Second
+	}
+	// add up to +50% jitter
+	d += time.Duration(rand.Int63n(int64(d/2) + 1))
+	return d
 }
 
 func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, error) {
 	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return nil },
-		Timeout:       30 * time.Second,
+		// Cap redirects so an auth/login redirect loop fails fast instead of
+		// hanging until the timeout (a private doc redirects to passport).
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects (login required? doc not public?)")
+			}
+			return nil
+		},
+		Timeout: 15 * time.Second,
 	}
 
+	utils.Debugf("[YDOCS] fetchDocInfo GET %s", url)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := client.Do(req)
@@ -397,6 +442,7 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 
 	htmlBytes, _ := io.ReadAll(resp.Body)
 	html := string(htmlBytes)
+	utils.Debugf("[YDOCS] response status=%d finalURL=%s body=%dB", resp.StatusCode, resp.Request.URL.String(), len(html))
 
 	var cookies []string
 	for _, c := range resp.Cookies() {
@@ -406,7 +452,12 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 	re := regexp.MustCompile(`<script[^>]*id="client-config"[^>]*>(.*?)</script>`)
 	matches := re.FindStringSubmatch(html)
 	if len(matches) < 2 {
-		return YandexDocsInfo{}, fmt.Errorf("config not found")
+		// Help diagnose: is this a login page, a new-editor page, etc.?
+		hint := "no client-config script"
+		if strings.Contains(html, "passport") || strings.Contains(strings.ToLower(html), "login") {
+			hint = "looks like a login page (doc not public?)"
+		}
+		return YandexDocsInfo{}, fmt.Errorf("config not found: %s (status %d, final %s)", hint, resp.StatusCode, resp.Request.URL.String())
 	}
 
 	var config map[string]interface{}

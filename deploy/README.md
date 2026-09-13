@@ -55,4 +55,13 @@ Client Yandex:
 openflux --client --transport yandex --url "$OPENFLUX_URL" --socks5 127.0.0.1:1080
 ```
 
+Cups.online (Centrifugo rooms; exit prints a base64 list for `--url` on the client):
+
+```
+openflux --exit-node --transport cupsonline --mode proxy --bind-ip 203.0.113.10
+openflux --client --transport cupsonline --url "$CUPS_ROOMS_B64" --socks5 127.0.0.1:1084
+```
+
+Restarting the exit node mints a new room list; the client URL must be updated to match.
+
 Build: `go build -o openflux .` — do not commit the binary. Do not commit the upstream `universal-bypass-tool` blob.

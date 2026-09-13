@@ -1,8 +1,18 @@
 # Changelog
 
-Форк [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux). База upstream: `4619053`.
+Форк [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux). База upstream: `7835b71` (cups.online).
 
 Бинарник `universal-bypass-tool` из git убран, собирается `go build -o openflux .`.
+
+## 2026-09-13
+
+### Upstream merge
+
+- Транспорт `cupsonline` (Centrifugo / cups.online live-coding rooms).
+- `vyandex` (Volga editor), AES-256-GCM `--encryption-key-file`.
+- Exit mode `--mode proxy|raw`, `--local-ip` для raw.
+
+Fork-патчи сохранены: `--bind-ip`, `--channel`, MAX `dc`/`call-delay`/failover.
 
 ## 2026-09-10
 
