@@ -252,6 +252,13 @@ DEPRECATED (removed in v2)
 	if *mode == "" {
 		*mode = "l3"
 	}
+	// Legacy aliases kept for backward compatibility with existing unit files.
+	switch *mode {
+	case "proxy":
+		*mode = "l4"
+	case "raw":
+		*mode = "l3"
+	}
 
 	if *codec != codecBatched && *codec != codecLegacy {
 		log.Fatalf("--codec: unknown value %q (want batched|legacy)", *codec)
