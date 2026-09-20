@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"universal-bypass-tool/transport"
-	"universal-bypass-tool/utils"
+	"openflux/transport"
+	"openflux/utils"
 )
 
 type OneMeTransport struct {
@@ -112,3 +112,5 @@ func (t *OneMeTransport) Send(data []byte) error {
 	t.b.RecordSend(len(data))
 	return nil
 }
+
+

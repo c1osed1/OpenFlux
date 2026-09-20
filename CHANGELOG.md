@@ -4,6 +4,26 @@
 
 Бинарник `universal-bypass-tool` из git убран, собирается `go build -o openflux .`.
 
+## 2026-09-20
+
+### Upstream merge (`flx-kernel`, 19 коммитов)
+
+- Новый CLI: `--role=client|exit|bench-send|bench-sink`, `--inbound=tun|socks5`,
+  `--codec=batched|legacy`, короткие алиасы (`-r -i -t -m -c -u -s -l -d`),
+  старые `--client/--exit-node` оставлены как deprecated.
+- Транспорт `mailru` (Mail.ru Docs over WebSocket).
+- Кодек `batched`: zstd + коалессинг (`transport/batched.go`, `framing.go`),
+  по умолчанию; `legacy` = per-packet LZ4.
+- `l3` (raw sockets, SNAT/DNAT) и `l4` (gVisor proxy) как бэкенды exit-ноды;
+  `--mode raw` = `l3`, `--mode proxy` = `l4` (алиасы для совместимости с юнитами).
+- macOS TUN-клиент (`tun_darwin.go`, `tun_learn.go`, `tun_watch.go`), `bench.go`.
+- Yandex: batched+zstd канал, backoff реконнекта, precompiled regex.
+- Модуль переименован `universal-bypass-tool` -> `openflux`.
+- L3 backend: увеличены raw-socket буферы для high-BDP.
+
+Fork-патчи сохранены в merge: `--bind-ip`, `--channel`, `--max-payload ice|dc`,
+`--call-delay`, `--maxUid` failover, MAX DataChannel/reconnect, watchdog.
+
 ## 2026-09-13
 
 ### Upstream merge
