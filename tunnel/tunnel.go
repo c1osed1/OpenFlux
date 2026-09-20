@@ -157,7 +157,13 @@ func (t *TCPTunnel) handleExitTCP(r *tcp.ForwarderRequest) {
 	local := gonet.NewTCPConn(&wq, ep)
 
 	utils.SafeGo("exit.flow", func() {
-		remote, err := net.DialTimeout("tcp", dest, 10*time.Second)
+		dialer := net.Dialer{Timeout: 10 * time.Second}
+		if ip := getBindIP(); ip != "" {
+			if parsed := net.ParseIP(ip); parsed != nil {
+				dialer.LocalAddr = &net.TCPAddr{IP: parsed}
+			}
+		}
+		remote, err := dialer.Dial("tcp", dest)
 		if err != nil {
 			utils.Debugf("[EXIT] dial %s failed: %v", dest, err)
 			local.Close()
@@ -257,6 +263,16 @@ var bindIP string
 var localIPOverride string
 
 func SetBindIP(ip string) { bindIP = ip }
+
+// getBindIP returns the explicit source IP for exit-node dials, or "" when the
+// kernel should pick it. Unlike getLocalIP it never auto-detects, so the proxy
+// path only binds when --bind-ip/--local-ip was actually given.
+func getBindIP() string {
+	if bindIP != "" {
+		return bindIP
+	}
+	return localIPOverride
+}
 
 // SetLocalIP overrides the auto-detected egress IP for the exit node (raw mode).
 func SetLocalIP(ip string) { localIPOverride = ip }
