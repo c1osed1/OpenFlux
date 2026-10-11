@@ -105,10 +105,14 @@ func main() {
 
 	role := flag.String("role", roleClient, "client | exit | bench-send | bench-sink")
 	inbound := flag.String("inbound", "", "tun | socks5 (client only; default: tun on macOS, socks5 elsewhere)")
-	transportType := flag.String("transport", "yandex", "Transport type (yandex, vyandex, oneme, cupsonline, mailru)")
+	transportType := flag.String("transport", "yandex", "Transport type (yandex, vyandex, oneme, cupsonline, mailru, direct)")
 	mode := flag.String("mode", "", "Exit-node mode: l3 (default, Linux only) or l4 (works everywhere)")
 
 	codec := flag.String("codec", codecBatched, "batched (default, zstd+coalescing) or legacy (per-packet LZ4)")
+
+	// direct: plain TCP carrier to a self-hosted exit. Requires encryption.
+	directListen := flag.String("direct-listen", "", "direct transport: exit listen addr, e.g. 0.0.0.0:8443 (exit role)")
+	directDial := flag.String("direct-dial", "", "direct transport: exit host:port to dial (client role)")
 
 	// OpenFlux fork extras (c1osed1): extra exit/client options on top of upstream.
 	bindIP := flag.String("bind-ip", "", "Exit-node source IPv4 (multi-IP hosts, proxy mode)")
@@ -343,6 +347,15 @@ DEPRECATED (removed in v2)
 		inner = cupsonline.NewCupsonlineTransport(globalDocUrl, config, *role != roleExit)
 	case "mailru":
 		inner = mailru.NewMailruDocsTransport(globalDocUrl, config)
+	case "direct":
+		if *encryptionKeyFile == "" {
+			log.Fatalf("--transport=direct requires --encryption-key-file (otherwise traffic is plaintext)")
+		}
+		dcfg := transport.DefaultDirectConfig()
+		dcfg.IsExit = *role == roleExit
+		dcfg.ListenAddr = *directListen
+		dcfg.DialAddr = *directDial
+		inner = transport.NewDirectTransport(config, dcfg)
 	default:
 		log.Fatalf("Unknown transport type: %s", *transportType)
 	}
