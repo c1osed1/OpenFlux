@@ -56,6 +56,77 @@ func (s *DocSession) safeWrite(messageType int, data []byte) error {
 	return s.Conn.WriteMessage(messageType, data)
 }
 
+const mailruSocketIOHandshakeTimeout = 15 * time.Second
+
+// waitMailruSocketIO completes the Engine.IO / Socket.IO handshake before
+// editor authentication is sent. Mail.ru requires the Engine.IO open frame to
+// be consumed and the Socket.IO connect acknowledged before the editor auth
+// message; sending auth immediately (as the old code did) makes the server
+// close the connection (no close frame) every few seconds, so the channel
+// never carries traffic. Ported from upstream 0.4.2 (fix by Novarg93, #147).
+func waitMailruSocketIO(session *DocSession, token string) error {
+	if session == nil || session.Conn == nil {
+		return fmt.Errorf("mailru: websocket session is nil")
+	}
+
+	conn := session.Conn
+
+	if err := conn.SetReadDeadline(time.Now().Add(mailruSocketIOHandshakeTimeout)); err != nil {
+		return fmt.Errorf("mailru: set handshake deadline: %w", err)
+	}
+	defer conn.SetReadDeadline(time.Time{})
+
+	waitFor := func(match func(string) bool) error {
+		for {
+			messageType, payload, err := conn.ReadMessage()
+			if err != nil {
+				return err
+			}
+			if messageType != websocket.TextMessage {
+				continue
+			}
+			text := string(payload)
+
+			// Engine.IO heartbeat may arrive while handshaking.
+			if text == "2" {
+				if err := session.safeWrite(websocket.TextMessage, []byte("3")); err != nil {
+					return fmt.Errorf("mailru: send Engine.IO pong: %w", err)
+				}
+				continue
+			}
+
+			if match(text) {
+				return nil
+			}
+			utils.Debugf("[M-DOCS] handshake: ignoring server frame %q", text)
+		}
+	}
+
+	// Engine.IO open: 0{"sid":"...", ...}
+	if err := waitFor(func(text string) bool {
+		return strings.HasPrefix(text, "0{")
+	}); err != nil {
+		return fmt.Errorf("mailru: wait for Engine.IO open: %w", err)
+	}
+	utils.Debugf("[M-DOCS] Engine.IO open")
+
+	// Socket.IO connect: 40{"token":"..."}
+	socketConnect := fmt.Sprintf(`40{"token":"%s"}`, token)
+	if err := session.safeWrite(websocket.TextMessage, []byte(socketConnect)); err != nil {
+		return fmt.Errorf("mailru: send Socket.IO connect: %w", err)
+	}
+
+	// Socket.IO acknowledgement: 40{"sid":"..."}
+	if err := waitFor(func(text string) bool {
+		return strings.HasPrefix(text, "40")
+	}); err != nil {
+		return fmt.Errorf("mailru: wait for Socket.IO connect: %w", err)
+	}
+	utils.Debugf("[M-DOCS] Socket.IO connected")
+
+	return nil
+}
+
 type MailruDocsTransport struct {
 	*transport.BaseTransport
 
@@ -195,6 +266,16 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 			UserID:     userID,
 		}
 
+		// Complete the Engine.IO / Socket.IO handshake before auth. Without
+		// this the server drops the connection every few seconds and no
+		// traffic passes (upstream 0.4.2 fix).
+		if err := waitMailruSocketIO(session, info.Token); err != nil {
+			utils.Debugf("[M-DOCS] Socket.IO handshake failed: %v", err)
+			_ = conn.Close()
+			t.scheduleReconnect(attempt)
+			return
+		}
+
 		t.Mu.Lock()
 		t.session = session
 		t.SetConnected(true)
@@ -203,16 +284,6 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 		if existingSession == nil {
 			utils.SafeGo("mailru.writer", t.writerLoop)
 		}
-
-		// Auth - fired immediately, same as the Yandex.Docs transport. No
-		// need to wait for the server's own "0{"/"40" handshake frames
-		// first: Mail.ru's coauthoring server buffers and processes these
-		// once its own session state catches up, and waiting for explicit
-		// acks here only stretches the outage window on every reconnect
-		// (Mail.ru can delay a fresh joiner's auth confirmation by up to
-		// ~30s while it reconciles with the other participant).
-		auth1 := fmt.Sprintf(`40{"token":"%s"}`, info.Token)
-		session.safeWrite(websocket.TextMessage, []byte(auth1))
 
 		authMsg := map[string]interface{}{
 			"type":                "auth",
